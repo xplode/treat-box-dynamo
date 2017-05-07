@@ -3,112 +3,119 @@
  *  Interfaces with the dynamodb and the configured table.
  */
 "use strict";
-console.log("Loading event");
 
-var aws = require("aws-sdk");
-var docClient = new aws.DynamoDB.DocumentClient();
-var table = "TreatBox"; // Change this to whatever table you want to work with.
+module.exports = new function () {
+    // We're gonna be talking to dynamoDB, so set that up.
+    this.aws = require("aws-sdk");
+    this.docClient = new this.aws.DynamoDB.DocumentClient();
 
-/* Gets a user identified by the given session and calls back with error and result.
- */
-function get(key, value, callback) {
-  console.log("Getting items where " + key " = " + value);
-  // Scan def doesn"t seem like the best way to achieve this, but I"m in a hurry :P
-  var params = {
-    TableName: table,
-    ProjectedExpression: key,
-    FilterExpression: key + " = :value",
-    ExpressionAttributeValues: {
-      ":value": value
+    this.setTable = function (table) {
+      var self = this;
+      self.table = table;
     }
-  };
 
-  docClient.scan(params, function(err, data) {
-    // If there was in error while calling dynamodb, let the call know about it.
-    if (err) {
-      var error = "Unable to scan the table." + JSON.stringify(err, null, 2);
-      console.log(error);
-      callback(error, null);
-    } else {
-      // Log the found items and return them to the user.  NOTE: This method
-      // doesn't attempt to continually fetch items.  Only intended to retrieve
-      // a few small items.
-      data.Items.forEach(function(item) {
-        console.log(JSON.stringify(item, null, 2));
-      });
-      callback(null, data.Items);
+    this.setRegion = function (region) {
+      var self = this;
+      self.aws.config.region = region;
+      self.docClient = new self.aws.DynamoDB.DocumentClient();
     }
-  });
-}
 
-// proxy for get, raises an error if exactly one item is not found.
-function getSingle(key, value, callback) {
-  get(key, value, function(err, items) {
-    if (err) {
-      callback(err, null);
-    } else {
-      if (items.length !== 1) {
-        callback("Expected a single item, instead found: " + items.length, null);
-      } else {
-        callback(null, items[0]);
-      }
-    }
-  });
-}
+    /* Gets a user identified by the given session and calls back with error and
+     * result.*/
+    this.get = function (key, value, callback) {
+      console.log("Getting items where " + key + " = " + value);
 
-function updateUser(key, value, expression, updates, callback) {
-  console.log("Updating user.");
-  getSingle(key, value, function(err, user) {
-    if (err) {
-      callback(err, null);
-    } else {
-      var userid = user['user-id'];
+      var self = this;
+
+      // Scan def doesn"t seem like the best way to achieve this, but I"m in a hurry :P
       var params = {
-          TableName: table,
-          Key: {
-            "user-id": userid
-          },
-          UpdateExpression: expression,
-          ExpressionAttributeValues: updates,
-          ReturnValues: "UPDATED_NEW"
+        TableName: self.table,
+        ProjectedExpression: key,
+        FilterExpression: key + " = :value",
+        ExpressionAttributeValues: {
+          ":value": value
+        }
       };
-      docClient.update(params, function(err, data) {
+
+      self.docClient.scan(params, function(err, data) {
+        // If there was in error while calling dynamodb, let the call know about it.
         if (err) {
-          callback(err, null);
+          var error = "Unable to scan the table." + JSON.stringify(err, null, 2);
+          console.log(error);
+          callback(error, null);
         } else {
-          console.log("User successfully updated.");
-          callback(null, data);
+          // Log the found items and return them to the user.  NOTE: This method
+          // doesn't attempt to continually fetch items.  Only intended to retrieve
+          // a few small items.
+          data.Items.forEach(function(item) {
+            console.log(JSON.stringify(item, null, 2));
+          });
+          callback(null, data.Items);
         }
       });
     }
-  });
-}
 
-function clearSession(sessionId, callback) {
-  console.log("Clearing user session.");
-  var expression = "set sessionid = :sid";
-  var updates =  { ":sid": false };
-  updateUser('sessionid', sessionId, expression, updates, function(err, result) {
-    if (err) {
-      callback(err, null);
-    } else {
-      callback(null, result);
-    }
-  });
-}
-
-exports.handler = (event, context, callback) => {
-  console.log("Running handler.");
-  console.log(JSON.stringify(event, null, 2));
-
-  switch (event.action) {
-    case 'get':
-      get(event.key, event.value, function(err, result) {
-        callback(err, result);
+    // proxy for get, raises an error if exactly one item is not found.
+    this.getSingle = function (key, value, callback) {
+      var self = this;
+      self.get(key, value, function(err, items) {
+        if (err) {
+          callback(err, null);
+        } else {
+          if (items.length !== 1) {
+            callback("Expected a single item, instead found: " + items.length, null);
+          } else {
+            callback(null, items[0]);
+          }
+        }
       });
-      break;
-    default:
-      console.log("Bad data given in event.");
-      callback("Bad event data.", null);
-  }
-};
+    }
+
+    this.updateUser = function (key, value, expression, updates, callback) {
+      console.log("Updating user.");
+
+      var self = this;
+
+      self.getSingle(key, value, function(err, user) {
+        if (err) {
+          callback(err, null);
+        } else {
+          var userid = user['user-id'];
+          var params = {
+              TableName: self.table,
+              Key: {
+                "user-id": userid
+              },
+              UpdateExpression: expression,
+              ExpressionAttributeValues: updates,
+              ReturnValues: "UPDATED_NEW"
+          };
+          self.docClient.update(params, function(err, data) {
+            if (err) {
+              callback(err, null);
+            } else {
+              console.log("User successfully updated.");
+              callback(null, data);
+            }
+          });
+        }
+      });
+    }
+
+    this.clearSession = function (sessionId, callback) {
+      console.log("Clearing user session.");
+
+      var self = this;
+
+      var expression = "set sessionid = :sid";
+      var updates =  { ":sid": false };
+      self.updateUser('sessionid', sessionId, expression, updates, function(err, result) {
+        if (err) {
+          callback(err, null);
+        } else {
+          callback(null, result);
+        }
+      });
+    }
+  };
+
