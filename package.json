@@ -1,0 +1,19 @@
+{
+  "name": "treat-box-dynamo",
+  "version": "1.0.0",
+  "description": "Provides treat-box specific interfaces for managing user state.",
+  "main": "index.js",
+  "dependencies": {
+    "aws-sdk": "^2.49.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xplode/treat-box-dynamo"
+  },
+  "author": "xplode",
+  "license": "MIT"
+}
